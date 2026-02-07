@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Radar risques HAD – Drill-down</title>
-  <script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min"></script>
   <style>
     body { font-family: Arial, sans-serif; margin: 20px; }
     .bar { display:flex; gap:12px; align-items:center; flex-wrap: wrap; }
@@ -174,3 +174,4 @@
   </script>
 </body>
 </html>
+
