@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Radar risques HAD – Drill-down</title>
+  <script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    .bar { display:flex; gap:12px; align-items:center; flex-wrap: wrap; }
+    h2 { margin:0; }
+    button { padding:8px 12px; cursor:pointer; }
+    #subtitle { color:#444; margin: 6px 0 12px 0; }
+    #chart { width: 100%; max-width: 980px; height: 560px; }
+    .hint { font-size: 12px; color:#666; margin-top: 6px; }
+    select { padding:6px 10px; }
+  </style>
+</head>
+<body>
+  <div class="bar">
+    <h2>Cartographie des risques – Radar interactif</h2>
+    <button id="backBtn" style="display:none;">← Retour</button>
+
+    <span style="margin-left:auto;"></span>
+
+    <label for="agg" class="hint">Agrégation score processus :</label>
+    <select id="agg">
+      <option value="max" selected>Max (principe “maillon faible”)</option>
+      <option value="avg">Moyenne</option>
+    </select>
+  </div>
+
+  <div id="subtitle">Vue Processus (clique sur un axe pour détailler)</div>
+  <div id="chart"></div>
+  <div class="hint">Échelle 0 → 1. Les données affichées sont des scores agrégés / détaillés sans données nominatives.</div>
+
+  <script>
+    // =========================
+    // 1) Données (TES données)
+    // =========================
+    const rows = [
+      {processus:"Admission", sous:"Collecte des informations administratives", score:0.80},
+      {processus:"Admission", sous:"Validation médicale de l'admission", score:0.70},
+      {processus:"Admission", sous:"Création du dossier patient", score:0.20},
+      {processus:"Admission", sous:"Cohérence dates admission / PEC", score:1.00},
+
+      {processus:"Prise en charge", sous:"Planification des soins", score:0.60},
+      {processus:"Prise en charge", sous:"Traçabilité des actes réalisés", score:0.70},
+      {processus:"Prise en charge", sous:"Gestion des prescriptions", score:0.40},
+
+      {processus:"Masse salariale", sous:"Dimensionnement des effectifs", score:0.10},
+      {processus:"Masse salariale", sous:"Planification et remplacements", score:0.20},
+      {processus:"Masse salariale", sous:"Heures supplémentaires et astreintes", score:0.30},
+      {processus:"Masse salariale", sous:"Recours aux libéraux / sous-traitants", score:0.80},
+      {processus:"Masse salariale", sous:"Analyse coût / activité", score:0.90},
+
+      {processus:"Codification PMSI", sous:"Collecte des données codables", score:0.50},
+      {processus:"Codification PMSI", sous:"Codage MPP / MPA / IK", score:0.30},
+      {processus:"Codification PMSI", sous:"Contrôles de cohérence PMSI", score:0.20},
+      {processus:"Codification PMSI", sous:"Corrections et rejets PMSI", score:1.00},
+
+      {processus:"Facturation", sous:"Contrôle complétude facturable", score:0.60},
+      {processus:"Facturation", sous:"Émission des factures", score:0.70},
+      {processus:"Facturation", sous:"Gestion des rejets payeurs", score:0.40},
+
+      {processus:"Recouvrement", sous:"Suivi des encaissements", score:0.10},
+      {processus:"Recouvrement", sous:"Relances et litiges", score:0.20},
+      {processus:"Recouvrement", sous:"Créances âgées", score:0.20},
+
+      {processus:"Pilotage", sous:"Suivi indicateurs médico-économiques", score:0.10},
+      {processus:"Pilotage", sous:"Analyse écarts activité / charges", score:1.00},
+      {processus:"Pilotage", sous:"Aide à la décision stratégique", score:0.10},
+    ];
+
+    // =========================
+    // 2) Préparation drill-down
+    // =========================
+    function groupByProcess(rows) {
+      const map = new Map();
+      for (const r of rows) {
+        if (!map.has(r.processus)) map.set(r.processus, []);
+        map.get(r.processus).push({label:r.sous, value:r.score});
+      }
+      return map;
+    }
+    const drilldown = groupByProcess(rows);
+
+    function aggregateProcessScores(method) {
+      const labels = [];
+      const values = [];
+      for (const [proc, items] of drilldown.entries()) {
+        labels.push(proc);
+        const nums = items.map(x => x.value);
+        let v = 0;
+        if (method === "avg") v = nums.reduce((a,b)=>a+b,0) / nums.length;
+        else v = Math.max(...nums); // "maillon faible"
+        values.push(Number(v.toFixed(2)));
+      }
+      return {labels, values};
+    }
+
+    // =========================
+    // 3) Rendu radar
+    // =========================
+    const chartDiv = document.getElementById("chart");
+    const backBtn = document.getElementById("backBtn");
+    const subtitle = document.getElementById("subtitle");
+    const aggSel = document.getElementById("agg");
+
+    let currentView = "process"; // "process" | "sub"
+    let currentProcess = null;
+
+    function renderRadar(title, labels, values, rangeMax=1) {
+      const closedLabels = [...labels, labels[0]];
+      const closedValues = [...values, values[0]];
+
+      const trace = {
+        type: "scatterpolar",
+        r: closedValues,
+        theta: closedLabels,
+        fill: "toself",
+        hovertemplate: "<b>%{theta}</b><br>Score: %{r}<extra></extra>"
+      };
+
+      const layout = {
+        margin: { t: 35, r: 35, b: 35, l: 35 },
+        polar: { radialaxis: { visible: true, range: [0, rangeMax] } },
+        showlegend: false,
+        title: { text: title, x: 0.02, y: 0.98 }
+      };
+
+      Plotly.newPlot(chartDiv, [trace], layout, {displayModeBar:false, responsive:true});
+    }
+
+    function showProcessView() {
+      currentView = "process";
+      currentProcess = null;
+      backBtn.style.display = "none";
+      subtitle.textContent = "Vue Processus (clique sur un axe pour détailler)";
+      const agg = aggregateProcessScores(aggSel.value);
+      renderRadar("Niveau de risque par processus", agg.labels, agg.values, 1);
+    }
+
+    function showSubprocessView(procName) {
+      const items = drilldown.get(procName);
+      if (!items) return;
+      currentView = "sub";
+      currentProcess = procName;
+      backBtn.style.display = "inline-block";
+      subtitle.textContent = `Détail – ${procName} (sous-processus)`;
+      const labels = items.map(x => x.label);
+      const values = items.map(x => x.value);
+      renderRadar(`Niveau de risque – ${procName}`, labels, values, 1);
+    }
+
+    // Interactions
+    showProcessView();
+
+    chartDiv.on("plotly_click", (ev) => {
+      const clicked = ev?.points?.[0]?.theta;
+      if (!clicked) return;
+      if (currentView === "process") {
+        // Drill-down si processus connu
+        if (drilldown.has(clicked)) showSubprocessView(clicked);
+      }
+    });
+
+    backBtn.addEventListener("click", showProcessView);
+
+    aggSel.addEventListener("change", () => {
+      // Si on change l'agrégation, on reste logique : si on est en vue processus -> refresh
+      if (currentView === "process") showProcessView();
+    });
+  </script>
+</body>
+</html>
